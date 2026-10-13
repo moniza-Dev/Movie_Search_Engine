@@ -13,7 +13,10 @@ import java.util.Scanner;
 public class Main {
     static int currentPage = 1;
 
-    public static void updatePageNumber(int pageNumber,int total_pages) {
+    public static void updatePageNumber(int pageNumber, int total_pages) {
+        if (total_pages < 1) {
+            total_pages = 1;
+        }
         if (pageNumber < 1) {
             pageNumber = 1;
         }
@@ -23,13 +26,28 @@ public class Main {
         currentPage = pageNumber;
     }
 
+    private static int readInt(Scanner input, String prompt) {
+        System.out.print(prompt);
+        try {
+            return Integer.parseInt(input.nextLine().trim());
+        } catch (NumberFormatException e) {
+            System.out.println("Please enter a valid number.");
+            return -1;
+        }
+    }
+
     public static void main(String[] args) {
+        String token = System.getenv("TMDB_ACCESS_TOKEN");
+        if (token == null || token.isBlank()) {
+            System.out.println("Missing environment variable TMDB_ACCESS_TOKEN. See README for setup.");
+            return;
+        }
+
         System.setOut(new PrintStream(System.out, true, StandardCharsets.UTF_8));
         Scanner input = new Scanner(System.in);
         MovieService service = new MovieServiceImpl();
         TableRenderer renderer = new TableRenderer();
         MovieDetailRenderer detailRenderer = new MovieDetailRenderer();
-        outerLoop :
 
         System.out.println("""
                 
@@ -44,47 +62,62 @@ public class Main {
                 
                 
                     """);
-        while(true) {
+        System.out.println("Type a movie title to search, or E to exit.");
+
+        while (true) {
             System.out.print("Enter movie title : ");
             String choice = input.nextLine().trim();
             if (choice.equalsIgnoreCase("e")) {
                 break;
             }
+            if (choice.isEmpty()) {
+                System.out.println("Please enter a movie title.");
+                continue;
+            }
             currentPage = 1;
+            searchLoop:
             while (true) {
-                MovieResponse response = service.getMoviesByQuery(choice, currentPage);
+                MovieResponse response;
+                try {
+                    response = service.getMoviesByQuery(choice, currentPage);
+                } catch (RuntimeException e) {
+                    System.out.println("Something went wrong while contacting TMDB: " + e.getMessage());
+                    break;
+                }
                 renderer.Display(response);
-                System.out.printf("Page %d out of %s | Total Results : %d \n", currentPage, response.getTotal_pages(),response.getTotal_results());
+                System.out.printf("Page %d out of %s | Total Results : %d \n", currentPage, response.getTotal_pages(), response.getTotal_results());
                 System.out.println("=== Page navigation ===");
                 System.out.println("""
-                        [N] Next Page        [B] Back
+                        [N] Next Page        [B] Back to search
                         [P] Previous Page    [md] Movie detail
-                        [G] Go to page
+                        [G] Go to page       [E] Exit
                         """);
                 System.out.print("Enter an option: ");
-                String op = input.nextLine();
+                String op = input.nextLine().trim();
                 switch (op) {
-                    case "N", "n" -> {
-                        updatePageNumber(currentPage + 1, response.getTotal_pages());
-                        break;
-                    }
+                    case "N", "n" -> updatePageNumber(currentPage + 1, response.getTotal_pages());
                     case "P", "p" -> updatePageNumber(currentPage - 1, response.getTotal_pages());
                     case "G", "g" -> {
-                        System.out.print("Enter page number to go: ");
-                        int requestedPage = Integer.parseInt(input.nextLine().trim());
-
-                        updatePageNumber(
-                                requestedPage, response.getTotal_pages()
-                        );
-                        break;
+                        int requestedPage = readInt(input, "Enter page number to go: ");
+                        if (requestedPage > 0) {
+                            updatePageNumber(requestedPage, response.getTotal_pages());
+                        }
                     }
-                    case "md", "MD","m","d" -> {
-                        System.out.print("Enter the movie ID : ");
-                        int movieID = Integer.parseInt(input.nextLine().trim());
-                        detailRenderer.DetailRender(service.getMovieDetailById(movieID));
-
+                    case "md", "MD", "m", "d" -> {
+                        int movieID = readInt(input, "Enter the movie ID : ");
+                        if (movieID > 0) {
+                            try {
+                                detailRenderer.DetailRender(service.getMovieDetailById(movieID));
+                            } catch (RuntimeException e) {
+                                System.out.println("Could not load movie details: " + e.getMessage());
+                            }
+                        }
+                    }
+                    case "B", "b" -> {
+                        break searchLoop;
                     }
                     case "E", "e" -> System.exit(0);
+                    default -> System.out.println("Unknown option. Please choose from the menu.");
                 }
             }
         }

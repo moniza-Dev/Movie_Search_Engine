@@ -4,21 +4,23 @@ import tools.jackson.databind.ObjectMapper;
 import utils.MovieService;
 
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
 
 public class MovieServiceImpl implements MovieService {
     static String Access_Token = System.getenv("TMDB_ACCESS_TOKEN");
-    static String api_key = System.getenv("TMDB_API_KEY");
 
     @Override
     public MovieResponse getMoviesByQuery(String input,int currentPage){
 
         ObjectMapper mapper = new ObjectMapper();
-        String url = String.format("https://api.themoviedb.org/3/search/movie?api_key=%s&query=%s&page=%d",api_key,input,currentPage);
+        String encodedQuery = URLEncoder.encode(input, StandardCharsets.UTF_8);
+        String url = String.format("https://api.themoviedb.org/3/search/movie?query=%s&page=%d", encodedQuery, currentPage);
         try {
             HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
             HttpRequest request = HttpRequest.newBuilder()
